@@ -1,0 +1,251 @@
+<!doctype html>
+<html lang="it">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SwitchEQ</title>
+    <link rel="stylesheet" href="/src/styles.css" />
+    <script type="module" src="/src/main.ts"></script>
+  </head>
+  <body>
+    <header class="top">
+      <div class="brand">
+        <span class="logo" aria-hidden="true"></span>
+        <h1 id="app-name">SwitchEQ</h1>
+      </div>
+      <div class="pills">
+        <span id="pill-headset" class="pill" data-i18n="pill.headset.loading">Cuffie: …</span>
+        <span id="pill-eq" class="pill" data-i18n="pill.eq.loading">EQ: …</span>
+      </div>
+    </header>
+
+    <main>
+      <div id="dev-banner" class="banner warn" hidden></div>
+      <!-- Cuffie -->
+      <section class="card" id="card-headset">
+        <div class="card-head">
+          <h2 data-i18n="hp.title">Cuffie</h2>
+          <button id="btn-refresh" class="ghost" data-i18n="hp.refresh" data-i18n-title="hp.refresh.title" title="Aggiorna lo stato">Aggiorna</button>
+        </div>
+        <div class="row">
+          <label class="grow">
+            <span class="lbl" data-i18n="hp.output">Dispositivo audio di uscita</span>
+            <select id="output-select"></select>
+          </label>
+        </div>
+        <div class="row">
+          <div class="grow">
+            <span class="lbl" data-i18n="hp.model">Modello</span>
+            <div id="model-name" class="model-name"></div>
+          </div>
+          <label id="variant-wrap" hidden>
+            <span class="lbl" data-i18n="hp.variant">Misura</span>
+            <select id="variant-select"></select>
+          </label>
+        </div>
+        <details id="model-details">
+          <summary data-i18n="hp.change_model">Cambia modello</summary>
+          <div id="model-picker-host"></div>
+        </details>
+        <div id="headset-bt" hidden>
+          <div id="headset-list" class="headset-list"></div>
+          <div class="row wrap">
+            <button id="btn-disconnect" data-i18n="hp.release" data-i18n-title="hp.release.title" title="Disconnette le cuffie da questo PC così possono collegarsi a qualsiasi altro dispositivo">Rilascia cuffie</button>
+            <button id="btn-connect" data-i18n="hp.reconnect" data-i18n-title="hp.reconnect.title" title="Ricollega a questo PC le cuffie già accoppiate (devono essere accese e in portata)">Riconnetti a questo PC</button>
+            <button id="btn-btsettings" class="ghost" data-i18n="hp.btsettings">Impostazioni Bluetooth</button>
+          </div>
+        </div>
+        <div class="row wrap">
+          <button id="btn-default" class="ghost" data-i18n="hp.use_output">Usa come uscita audio</button>
+        </div>
+        <p id="headset-msg" class="msg" role="status"></p>
+      </section>
+
+      <!-- Equalizzatore -->
+      <section class="card" id="card-eq">
+        <div class="card-head">
+          <h2 data-i18n="eq.title">Equalizzatore</h2>
+          <label class="switch" data-i18n-title="eq.switch.title" title="Attiva o metti in bypass l'equalizzazione. In bypass i filtri si spengono; con «Volume uniforme tra i preset» resta applicato il preamp comune, così spegnere l'EQ non alza il volume">
+            <input type="checkbox" id="eq-enabled" />
+            <span class="slider"></span>
+            <span class="switch-label" id="eq-enabled-label">Attivo</span>
+          </label>
+        </div>
+
+        <div id="apo-banner" class="banner" hidden></div>
+
+        <div class="row">
+          <label class="grow">
+            <span class="lbl" data-i18n="eq.preset">Preset</span>
+            <select id="preset-select"></select>
+          </label>
+        </div>
+        <p id="preset-desc" class="desc"></p>
+        <p id="preset-source" class="source"></p>
+
+        <canvas id="curve" height="200" data-i18n-aria="eq.curve.aria" aria-label="Curva di risposta dell'equalizzatore"></canvas>
+
+        <div class="row preamp-row">
+          <span class="lbl" data-i18n="eq.preamp">Preamp</span>
+          <label class="check"><input type="checkbox" id="preamp-auto" /> <span data-i18n="eq.preamp_auto">automatico</span></label>
+          <input type="range" id="preamp-manual" min="-30" max="10" step="0.1" />
+          <output id="preamp-value" class="mono">0.0 dB</output>
+        </div>
+        <p id="preamp-note" class="hint"></p>
+
+        <div class="tabs" role="tablist">
+          <button role="tab" class="tab active" data-tab="graphic" data-i18n="eq.tab.graphic">Grafico 10 bande</button>
+          <button role="tab" class="tab" data-tab="parametric" data-i18n="eq.tab.parametric">Parametrico</button>
+        </div>
+
+        <div id="tab-graphic" class="tab-panel">
+          <p class="hint" data-i18n="eq.graphic.hint">Le bande si sommano al preset selezionato (±12 dB, Q 1,41).</p>
+          <div id="graphic" class="graphic"></div>
+          <div class="row"><button id="graphic-reset" class="ghost small" data-i18n="eq.graphic.reset">Azzera bande</button></div>
+        </div>
+
+        <div id="tab-parametric" class="tab-panel" hidden>
+          <table class="peq">
+            <thead>
+              <tr><th data-i18n="eq.col.on">On</th><th data-i18n="eq.col.type">Tipo</th><th data-i18n="eq.col.freq">Freq (Hz)</th><th data-i18n="eq.col.gain">Guadagno (dB)</th><th>Q</th><th></th></tr>
+            </thead>
+            <tbody id="peq-body"></tbody>
+          </table>
+          <div class="row"><button id="peq-add" class="ghost small" data-i18n="eq.add_filter">+ Aggiungi filtro</button></div>
+        </div>
+
+        <div class="row wrap user-presets">
+          <input id="user-name" type="text" maxlength="60" data-i18n-placeholder="eq.user_name.placeholder" placeholder="Nome preset utente" />
+          <button id="user-save" data-i18n="eq.save">Salva</button>
+          <button id="user-delete" class="ghost" data-i18n="eq.delete">Elimina</button>
+          <button id="user-import" class="ghost" data-i18n="eq.import">Importa…</button>
+          <button id="user-export" class="ghost" data-i18n="eq.export">Esporta…</button>
+        </div>
+        <p id="eq-msg" class="msg" role="status"></p>
+      </section>
+
+      <!-- Impostazioni -->
+      <section class="card" id="card-settings">
+        <h2 data-i18n="set.title">Impostazioni</h2>
+        <label class="field">
+          <span class="lbl" data-i18n="set.language">Lingua</span>
+          <select id="set-language"></select>
+        </label>
+        <label class="check"><input type="checkbox" id="set-autostart" /> <span data-i18n="set.autostart">Avvia con Windows</span></label>
+        <p class="hint" id="autostart-hint" hidden></p>
+        <label class="check"><input type="checkbox" id="set-minimized" /> <span data-i18n="set.minimized">All'avvio automatico resta nascosta nel tray</span></label>
+        <label class="check"><input type="checkbox" id="set-default" /> <span data-i18n="set.default">Imposta le cuffie come uscita predefinita quando si connettono</span></label>
+        <label class="check" data-i18n-title="set.uniform.title" title="Tutti i preset usano lo stesso preamp, quello del preset che ne chiede di più. Compromesso: tutto suona un po' più basso (alza il volume nelle singole app), ma cambiando preset, anche in automatico quando parte un gioco, il volume non fa sbalzi e le altre app, per esempio Discord, restano allo stesso livello. Il volume di Windows non viene toccato. «Ascolto a basso volume» tiene il suo preamp più basso per non andare in clipping; i preset utente con preamp manuale non cambiano."><input type="checkbox" id="set-uniform" /> <span data-i18n="set.uniform">Volume uniforme tra i preset</span></label>
+        <label class="field">
+          <span class="lbl" data-i18n="set.patterns">Nomi Bluetooth da riconoscere (separati da virgola; vuoto per cuffie cablate)</span>
+          <input id="set-patterns" type="text" />
+        </label>
+        <label class="field">
+          <span class="lbl" data-i18n="set.device">Dispositivo Equalizer APO (direttiva Device:, scelto con il dispositivo di uscita)</span>
+          <input id="set-device" type="text" />
+        </label>
+        <p class="hint" id="apo-path"></p>
+        <p class="msg" id="settings-msg" role="status"></p>
+      </section>
+
+      <!-- Attivazione automatica -->
+      <section class="card" id="card-auto">
+        <div class="card-head">
+          <h2 data-i18n="auto.title">Preset automatici per app e giochi</h2>
+          <label class="switch" data-i18n-title="auto.switch.title" title="Attiva o disattiva tutta la funzione">
+            <input type="checkbox" id="auto-enabled" />
+            <span class="slider"></span>
+            <span class="switch-label" id="auto-enabled-label">Spenta</span>
+          </label>
+        </div>
+        <p class="hint" data-i18n="auto.intro">
+          Quando parte un gioco o un'app con una regola, attiva il preset scelto; quando si chiude torna al preset
+          di prima. Se nel frattempo cambi preset a mano, resta la tua scelta.
+        </p>
+        <p id="auto-status" class="desc" role="status"></p>
+        <div class="auto-grid">
+          <div>
+            <label class="field">
+              <span class="lbl" data-i18n="auto.game_preset">Preset per i giochi</span>
+              <select id="auto-game-preset"></select>
+            </label>
+            <label class="check"><input type="checkbox" id="auto-fullscreen" /> <span data-i18n="auto.fullscreen">Considera gioco anche un'app a schermo intero in primo piano (esclusi browser e lettori video)</span></label>
+            <label class="check"><input type="checkbox" id="auto-notify" /> <span data-i18n="auto.notify">Notifica di Windows quando il preset cambia</span></label>
+            <p class="hint" data-i18n="auto.games_hint">
+              Giochi riconosciuti da soli: eseguibili nelle librerie di Steam, Epic, GOG, EA, Ubisoft e Xbox, e
+              programmi avviati da Battle.net, EA app, Ubisoft Connect, GOG Galaxy o dall'app Xbox.
+            </p>
+          </div>
+          <div>
+            <span class="lbl" data-i18n="auto.rules_label">Regole per eseguibile (la prima che corrisponde vince)</span>
+            <table class="peq rules">
+              <tbody id="rules-body"></tbody>
+            </table>
+            <div class="row wrap">
+              <input id="rule-exe" type="text" list="running-apps" maxlength="120" data-i18n-placeholder="auto.exe.placeholder" placeholder="es. vlc.exe" />
+              <datalist id="running-apps"></datalist>
+              <select id="rule-preset"></select>
+              <button id="rule-add" data-i18n="auto.add">Aggiungi</button>
+            </div>
+            <p class="hint"><span data-i18n="auto.suggest">Suggerimenti dalle app in esecuzione:</span> <button id="rule-refresh" class="ghost small" data-i18n="common.refresh_list">Aggiorna elenco</button></p>
+          </div>
+        </div>
+
+        <h3 data-i18n="auto.media.title">Film e musica in riproduzione</h3>
+        <div class="auto-grid">
+          <div>
+            <label class="check" data-i18n-title="auto.media.enabled.title" title="Usa la sessione multimediale di Windows (quella del riquadro del volume): nessun controllo periodico, l'app si sveglia solo quando una riproduzione parte, va in pausa o cambia brano"><input type="checkbox" id="media-enabled" /> <span data-i18n="auto.media.enabled">Riconosci film e musica in riproduzione</span></label>
+            <label class="field">
+              <span class="lbl" data-i18n="auto.media.music">Preset per la musica</span>
+              <select id="media-music"></select>
+            </label>
+            <label class="field">
+              <span class="lbl" data-i18n="auto.media.film">Preset per film e serie</span>
+              <select id="media-film"></select>
+            </label>
+            <p class="hint" data-i18n="auto.media.hint">
+              Musica: YouTube (anche i video), YouTube Music, Spotify, Apple Music, TIDAL, Deezer, Amazon Music.
+              Film: Netflix, Disney+ e Prime Video (app e browser), VLC, Lettore multimediale e Film e TV di Windows
+              (Musica se il file è solo audio). Nel browser conta il titolo della scheda: le sessioni del browser non
+              riconosciute non cambiano preset. Priorità: gioco, poi film e musica, poi le regole per eseguibile. In
+              pausa il preset resta 10 secondi, poi torna quello di prima.
+            </p>
+          </div>
+          <div>
+            <span class="lbl" data-i18n="auto.media.rules_label">Regole per app o sito (vincono su quelle integrate; la prima che corrisponde vince)</span>
+            <table class="peq rules">
+              <tbody id="media-rules-body"></tbody>
+            </table>
+            <div class="row wrap">
+              <input id="media-rule-pattern" type="text" maxlength="120" data-i18n-placeholder="auto.media.pattern.placeholder" placeholder="es. twitch, raiplay" />
+              <select id="media-rule-preset"></select>
+              <button id="media-rule-add" data-i18n="auto.add">Aggiungi</button>
+            </div>
+            <p class="hint" data-i18n="auto.media.rules_hint">
+              Il testo viene cercato nel nome dell'app (AUMID), nel titolo e nell'artista in riproduzione e nel titolo
+              della finestra del browser.
+            </p>
+          </div>
+        </div>
+        <p class="msg" id="auto-msg" role="status"></p>
+      </section>
+    </main>
+
+    <div id="wizard" class="overlay" hidden>
+      <div class="wizard card" role="dialog" aria-modal="true" aria-labelledby="wizard-title">
+        <h2 id="wizard-title" data-i18n="wiz.title">Configurazione iniziale</h2>
+        <p class="hint" id="wizard-step"></p>
+        <div id="wizard-body"></div>
+        <p id="wizard-msg" class="msg" role="status"></p>
+        <div class="row wrap wizard-nav">
+          <button id="wizard-skip" class="ghost" data-i18n="wiz.skip">Salta</button>
+          <span class="grow"></span>
+          <button id="wizard-back" class="ghost" data-i18n="wiz.back">Indietro</button>
+          <button id="wizard-next">Avanti</button>
+        </div>
+      </div>
+    </div>
+
+    <footer><span id="version"></span> · <span data-i18n="footer.hint">La finestra si chiude nel tray: usa «Esci» dal menu dell'icona per terminare.</span></footer>
+  </body>
+</html>
