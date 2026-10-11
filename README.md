@@ -147,8 +147,12 @@ src-tauri/
 installer downloads Microsoft's bootstrapper if it is missing) and
 [Equalizer APO](https://sourceforge.net/projects/equalizerapo/).
 
-1. Run `SwitchEQ_<version>_x64-setup.exe`. It installs for the current user only, without
-   administrator rights. Installer languages: English and Italian.
+1. Download `SwitchEQ_<version>_x64-setup.exe` from the
+   [Releases page](https://github.com/BennyCapozzo/switcheq/releases). Installers are built by GitHub
+   Actions from a version tag; each release has a `.sha256` file next to the installer and the
+   expected hash in its notes. [Verify the download](#verify-the-download), then run it. It installs
+   for the current user only, without administrator rights. Installer languages: English and
+   Italian.
 2. **Equalizer APO is not included** (it is a separate GPL v2+ program). If it is not installed, at
    the end of the setup the installer **asks** (default answer: No) whether to download it. If you
    agree it:
@@ -172,6 +176,20 @@ installer downloads Microsoft's bootstrapper if it is missing) and
 
 The installer is **not code-signed**, so Windows SmartScreen may show "Windows protected your PC"
 the first time; choose *More info*, then *Run anyway* only if you trust where you got the file.
+
+### Verify the download
+
+Compare the installer's SHA-256 with the value in the release notes (or in the `.sha256` file next to
+the installer). In PowerShell, from the folder with the download:
+
+```powershell
+Get-FileHash .\SwitchEQ_<version>_x64-setup.exe -Algorithm SHA256
+```
+
+(or `certutil -hashfile SwitchEQ_<version>_x64-setup.exe SHA256`). The hash must be identical (the
+case does not matter); if it is not, do not run the file. This detects a corrupted or altered
+download, but it is not a signature: it is only as trustworthy as the page you read the expected value
+from.
 
 ## Usage
 
@@ -356,6 +374,16 @@ are defined in [`src-tauri/src/brand.rs`](src-tauri/src/brand.rs) together with 
 Issues and pull requests are welcome. Please run `cargo test` and `cargo clippy --all-targets` in
 `src-tauri` and `npm run build` before sending a change. New behaviour should come with a test; test
 fixtures must use made-up numbers, never real measurements.
+
+### Releasing
+
+Releases are built by [`.github/workflows/release.yml`](.github/workflows/release.yml). Make the
+version in `src-tauri/tauri.conf.json`, `src-tauri/Cargo.toml` and `package.json` agree, merge to
+`main`, then push a matching tag (`git tag v0.1.0 && git push origin v0.1.0`). The workflow builds the
+unsigned NSIS installer and creates a **draft** GitHub Release with the installer, its `.sha256` file
+and the notes from [`.github/release-notes.md`](.github/release-notes.md); review it and publish it by
+hand. [`ci.yml`](.github/workflows/ci.yml) runs the tests, clippy and the frontend build on every push
+and pull request.
 
 ### Languages and translations
 

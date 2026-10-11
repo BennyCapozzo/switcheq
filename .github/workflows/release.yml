@@ -1,0 +1,110 @@
+name: Release
+
+# Builds the unsigned NSIS installer and uploads it, with a SHA-256 file, to a DRAFT
+# GitHub Release. Nothing is published automatically: review the draft and publish it by hand.
+#
+# Usage: push a tag matching the app version (git tag v0.1.0 && git push origin v0.1.0),
+# or run the workflow manually from the Actions tab.
+
+on:
+  push:
+    tags:
+      - "v[0-9]+.[0-9]+.[0-9]+"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Check that versions agree
+        shell: bash
+        env:
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          conf=$(node -p "require('./src-tauri/tauri.conf.json').version")
+          pkg=$(node -p "require('./package.json').version")
+          crate=$(sed -n 's/^version = "\(.*\)"/\1/p' src-tauri/Cargo.toml | head -n 1)
+          echo "tauri.conf.json=$conf package.json=$pkg Cargo.toml=$crate"
+          if [ "$conf" != "$pkg" ] || [ "$conf" != "$crate" ]; then
+            echo "::error::Version mismatch between tauri.conf.json, package.json and Cargo.toml"
+            exit 1
+          fi
+          if [ "$REF_TYPE" = "tag" ] && [ "$REF_NAME" != "v$conf" ]; then
+            echo "::error::Tag $REF_NAME does not match the app version v$conf"
+            exit 1
+          fi
+          echo "VERSION=$conf" >> "$GITHUB_ENV"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Set up Rust (stable, MSVC)
+        shell: pwsh
+        run: |
+          rustup toolchain install stable --profile minimal --no-self-update
+          rustup default stable
+          rustc --version
+          cargo --version
+
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          workspaces: src-tauri
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Build the NSIS installer and create the draft release
+        id: tauri
+        uses: tauri-apps/tauri-action@1deb371b0cd8bd54025b384f1cd735e725c4060f # action-v1.0.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: v__VERSION__
+          releaseName: SwitchEQ v__VERSION__
+          releaseBody: Draft release, notes are added by the workflow.
+          releaseDraft: true
+          prerelease: false
+          args: --bundles nsis
+
+      - name: Compute the SHA-256 and finish the draft release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $dir = 'src-tauri/target/release/bundle/nsis'
+          $installers = @(Get-ChildItem -Path $dir -Filter '*-setup.exe')
+          if ($installers.Count -ne 1) { throw "Expected exactly one installer in $dir, found $($installers.Count)" }
+          $exe = $installers[0]
+          $hash = (Get-FileHash -Algorithm SHA256 -Path $exe.FullName).Hash.ToLowerInvariant()
+          $sumFile = "$($exe.FullName).sha256"
+          # sha256sum format: "<hash>  <file name>", LF line ending, no BOM
+          [System.IO.File]::WriteAllText($sumFile, "$hash  $($exe.Name)`n", (New-Object System.Text.UTF8Encoding($false)))
+          Write-Host "$($exe.Name)  $hash"
+
+          $tag = "v$env:VERSION"
+          $notes = (Get-Content -Raw -Path '.github/release-notes.md').Replace('__VERSION__', $env:VERSION).Replace('__EXE__', $exe.Name).Replace('__SHA256__', $hash)
+          $notesFile = Join-Path $env:RUNNER_TEMP 'release-notes.md'
+          [System.IO.File]::WriteAllText($notesFile, $notes, (New-Object System.Text.UTF8Encoding($false)))
+
+          gh release upload $tag $sumFile --clobber
+          if ($LASTEXITCODE -ne 0) { throw 'gh release upload failed' }
+          gh release edit $tag --notes-file $notesFile
+          if ($LASTEXITCODE -ne 0) { throw 'gh release edit failed' }
