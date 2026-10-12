@@ -382,7 +382,11 @@ version in `src-tauri/tauri.conf.json`, `src-tauri/Cargo.toml` and `package.json
 `main`, then push a matching tag (`git tag v0.1.0 && git push origin v0.1.0`). The workflow builds the
 unsigned NSIS installer and creates a **draft** GitHub Release with the installer, its `.sha256` file
 and the notes from [`.github/release-notes.md`](.github/release-notes.md); review it and publish it by
-hand. [`ci.yml`](.github/workflows/ci.yml) runs the tests, clippy and the frontend build on every push
+hand: on the Releases page open the draft (named `SwitchEQ v<version>`), then *Edit* > *Publish release*
+(keep *Set as the latest release* ticked). Do **not** create a new release from the tag with *Draft a new
+release*: it would be a second, empty release for the same tag and the installer would not be downloadable
+from *Latest*. After publishing, check that `releases/latest/download/SwitchEQ_<version>_x64-setup.exe`
+downloads and matches the `.sha256` file. [`ci.yml`](.github/workflows/ci.yml) runs the tests, clippy and the frontend build on every push
 and pull request.
 
 ### Languages and translations
